@@ -104,7 +104,10 @@ def parse_args(args):
         type=str,
         choices=["llava_v1", "llava_llama_2"],
     )
-    return parser.parse_args(args)
+    args = parser.parse_args(args)
+    if args.batch_size >= args.workers:
+        args.workers = args.batch_size //2
+    return args
 
 
 def main(args):
@@ -123,15 +126,80 @@ def main(args):
         model_max_length=args.model_max_length,
         padding_side="right",
         use_fast=False,
+        legacy=True
     )
     tokenizer.pad_token = tokenizer.unk_token
     num_added_tokens = tokenizer.add_tokens("[SEG]")
     args.seg_token_idx = tokenizer("[SEG]", add_special_tokens=False).input_ids[0]
 
+    world_size = torch.cuda.device_count()
+    args.distributed = world_size > 1
+    train_dataset = HybridDataset(
+        args.dataset_dir,
+        tokenizer,
+        args.vision_tower,
+        samples_per_epoch=args.batch_size
+        * args.grad_accumulation_steps
+        * args.steps_per_epoch
+        * world_size,
+        precision=args.precision,
+        image_size=args.image_size,
+        num_classes_per_sample=args.num_classes_per_sample,
+        exclude_val=args.exclude_val,
+        dataset=args.dataset,
+        sample_rate=[float(x) for x in args.sample_rates.split(",")],
+        sem_seg_data=args.sem_seg_data,
+        refer_seg_data=args.refer_seg_data,
+        vqa_data=args.vqa_data,
+        reason_seg_data=args.reason_seg_data,
+        explanatory=args.explanatory,
+    )
+
+    if args.no_eval == False:
+        val_dataset = ValDataset(
+            args.dataset_dir,
+            tokenizer,
+            args.vision_tower,
+            args.val_dataset,
+            args.image_size,
+        )
+        print(
+            f"Training with {len(train_dataset)} examples and validating with {len(val_dataset)} examples."
+        )
+    else:
+        val_dataset = None
+        print(f"Training with {len(train_dataset)} examples.")
+
     if args.use_mm_start_end:
         tokenizer.add_tokens(
             [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True
         )
+
+    def load_tokenizer(version=args.version, model_max_length=args.model_max_length, use_mm_start_end=args.use_mm_start_end):
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            version,
+            cache_dir=None,
+            model_max_length=model_max_length,
+            padding_side="right",
+            use_fast=False,
+            legacy = False
+        )
+        tokenizer.pad_token = tokenizer.unk_token
+        num_added_tokens = tokenizer.add_tokens("[SEG]")
+        if use_mm_start_end:
+            tokenizer.add_tokens(
+                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True
+            )
+        return tokenizer
+
+
+    if False:
+        tokenizer_sb = load_tokenizer('meta-llama/Llama-2-7b-chat-hf')
+        while(1):
+            ans = tokenizer('<im_end>\nWhich so I know')
+            ans1 = tokenizer_sb('<im_end>\nWhich so I know')
+            print(ans)
+            print(ans1)
 
     model_args = {
         "train_mask_decoder": args.train_mask_decoder,
@@ -227,43 +295,6 @@ def main(args):
             print("n: ", n, "p.shape: ", p.shape)
             p.requires_grad = True
 
-    world_size = torch.cuda.device_count()
-    args.distributed = world_size > 1
-    train_dataset = HybridDataset(
-        args.dataset_dir,
-        tokenizer,
-        args.vision_tower,
-        samples_per_epoch=args.batch_size
-        * args.grad_accumulation_steps
-        * args.steps_per_epoch
-        * world_size,
-        precision=args.precision,
-        image_size=args.image_size,
-        num_classes_per_sample=args.num_classes_per_sample,
-        exclude_val=args.exclude_val,
-        dataset=args.dataset,
-        sample_rate=[float(x) for x in args.sample_rates.split(",")],
-        sem_seg_data=args.sem_seg_data,
-        refer_seg_data=args.refer_seg_data,
-        vqa_data=args.vqa_data,
-        reason_seg_data=args.reason_seg_data,
-        explanatory=args.explanatory,
-    )
-
-    if args.no_eval == False:
-        val_dataset = ValDataset(
-            args.dataset_dir,
-            tokenizer,
-            args.vision_tower,
-            args.val_dataset,
-            args.image_size,
-        )
-        print(
-            f"Training with {len(train_dataset)} examples and validating with {len(val_dataset)} examples."
-        )
-    else:
-        val_dataset = None
-        print(f"Training with {len(train_dataset)} examples.")
 
     ds_config = {
         "train_micro_batch_size_per_gpu": args.batch_size,
@@ -422,6 +453,7 @@ def train(
         args.steps_per_epoch,
         [
             batch_time,
+            data_time,
             losses,
             ce_losses,
             mask_losses,

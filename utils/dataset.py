@@ -117,7 +117,17 @@ def collate_fn(
 
             target[cur_len : cur_len + instruction_len] = IGNORE_INDEX
 
+            if False:
+                print("total len: ", total_len, "cur_len: ", cur_len)
+                print(i, " rounds:")
+                print("round_len: ", round_len, "instruction_len: ", instruction_len)
+                if cur_len+round_len == total_len:
+                    print(rou)
+                if cur_len+round_len > total_len:
+                    print(rou)
             cur_len += round_len
+        if False:
+            print('end\n')
         target[cur_len:] = IGNORE_INDEX
 
         if False:

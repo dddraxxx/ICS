@@ -45,6 +45,8 @@ def parse_args(args):
         type=str,
         choices=["llava_v1", "llava_llama_2"],
     )
+    parser.add_argument('--debug', '-d', action='store_true',
+                        help="debug mode")
     return parser.parse_args(args)
 
 
@@ -201,12 +203,16 @@ def main(args):
 
         while True:
             prompt = input("User: ")
-            prompt = DEFAULT_IMAGE_TOKEN + "\n" + prompt
-            if args.use_mm_start_end:
-                replace_token = (
-                    DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
-                )
-                prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
+            # if not prompt input, then break
+            if not prompt:
+                break
+            if not DEFAULT_IMAGE_TOKEN in conv.get_prompt():
+                prompt = DEFAULT_IMAGE_TOKEN + "\n" + prompt
+                if args.use_mm_start_end:
+                    replace_token = (
+                        DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                    )
+                    prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
 
             conv.append_message(conv.roles[0], prompt)
             conv.append_message(conv.roles[1], "")
@@ -227,40 +233,52 @@ def main(args):
             )
             output_ids = output_ids[0][output_ids[0] != IMAGE_TOKEN_INDEX]
 
-            print("output_ids: ", output_ids.tolist())
-
             text_output = tokenizer.decode(
                 output_ids, skip_special_tokens=False)
+            text_output = (DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN).join(text_output.split(DEFAULT_IM_END_TOKEN))
+
+            io_dict = {
+                "prompt": prompt,
+                "text_output": text_output,
+            }
+            if args.debug:
+                print()
+                print(io_dict)
+                print()
+
             text_output = text_output.replace("\n", "").replace("  ", " ")
+
 
             # add output to conv
             conv.messages[-1][-1] = text_output
 
-        for i, pred_mask in enumerate(pred_masks):
-            if pred_mask.shape[0] == 0:
-                continue
+            # if seg token in it
+            if args.seg_token_idx in output_ids:
+                for i, pred_mask in enumerate(pred_masks):
+                    if pred_mask.shape[0] == 0:
+                        continue
 
-            pred_mask = pred_mask.detach().cpu().numpy()[0]
-            pred_mask = pred_mask > 0
+                    pred_mask = pred_mask.detach().cpu().numpy()[0]
+                    pred_mask = pred_mask > 0
 
-            save_path = "{}/{}_mask_{}.jpg".format(
-                args.vis_save_path, image_path.split("/")[-1].split(".")[0], i
-            )
-            cv2.imwrite(save_path, pred_mask * 100)
-            print("{} has been saved.".format(save_path))
+                    save_path = "{}/{}_mask_{}.jpg".format(
+                        args.vis_save_path, image_path.split("/")[-1].split(".")[0], i
+                    )
+                    cv2.imwrite(save_path, pred_mask * 100)
+                    print("{} has been saved.".format(save_path))
 
-            save_path = "{}/{}_masked_img_{}.jpg".format(
-                args.vis_save_path, image_path.split("/")[-1].split(".")[0], i
-            )
-            save_img = image_np.copy()
-            save_img[pred_mask] = (
-                image_np * 0.5
-                + pred_mask[:, :,
-                            None].astype(np.uint8) * np.array([255, 0, 0]) * 0.5
-            )[pred_mask]
-            save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(save_path, save_img)
-            print("{} has been saved.".format(save_path))
+                    save_path = "{}/{}_masked_img_{}.jpg".format(
+                        args.vis_save_path, image_path.split("/")[-1].split(".")[0], i
+                    )
+                    save_img = image_np.copy()
+                    save_img[pred_mask] = (
+                        image_np * 0.5
+                        + pred_mask[:, :,
+                                    None].astype(np.uint8) * np.array([255, 0, 0]) * 0.5
+                    )[pred_mask]
+                    save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(save_path, save_img)
+                    print("{} has been saved.".format(save_path))
 
 
 if __name__ == "__main__":

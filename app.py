@@ -160,20 +160,17 @@ model.eval()
 examples = [
     [
         "Where can the driver see the car speed in this image? Please output segmentation mask.",
-        "./resources/imgs/example1.jpg",
+        "./imgs/example1.jpg",
     ],
     [
         "Can you segment the food that tastes spicy and hot?",
-        "./resources/imgs/example2.jpg",
+        "./imgs/example2.jpg",
     ],
     [
         "Assuming you are an autonomous driving robot, what part of the diagram would you manipulate to control the direction of travel? Please output segmentation mask and explain why.",
-        "./resources/imgs/example1.jpg",
+        "./imgs/example1.jpg",
     ],
-    [
-        "What can make the woman stand higher? Please output segmentation mask and explain why.",
-        "./resources/imgs/example3.jpg",
-    ],
+
 ]
 output_labels = ["Segmentation Output"]
 

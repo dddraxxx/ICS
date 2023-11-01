@@ -34,8 +34,17 @@ def tokenizer_image_token(
         offset = 1
         input_ids.append(prompt_chunks[0][0])
 
+    # insert image token after each chunk
     for x in insert_separator(prompt_chunks, [image_token_index] * (offset + 1)):
         input_ids.extend(x[offset:])
+
+    if False:
+        print("Debug")
+        print(offset)
+        print(prompt_chunks)
+        print()
+        print(len(input_ids))
+        print()
 
     if return_tensors is not None:
         if return_tensors == "pt":

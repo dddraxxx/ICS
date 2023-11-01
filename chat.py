@@ -43,6 +43,8 @@ def parse_args(args):
         type=str,
         choices=["llava_v1", "llava_llama_2"],
     )
+    # debug
+    parser.add_argument("--debug", "-d", action="store_true", default=False)
     return parser.parse_args(args)
 
 
@@ -223,6 +225,14 @@ def main(args):
 
         text_output = tokenizer.decode(output_ids, skip_special_tokens=False)
         text_output = text_output.replace("\n", "").replace("  ", " ")
+
+        print("LISA:", text_output)
+        if args.debug:
+            result = {
+                "prompt": prompt,
+                "output": text_output,
+            }
+            print("\n", result, "\n")
 
         for i, pred_mask in enumerate(pred_masks):
             if pred_mask.shape[0] == 0:

@@ -1,4 +1,8 @@
 **/__pycache__
 runs/
 .vscode/
+dataset/
 
+flagged/
+*.zip
+vis_output/
