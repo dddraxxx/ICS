@@ -6,3 +6,4 @@ dataset/
 flagged/
 *.zip
 vis_output/
+*.pth
