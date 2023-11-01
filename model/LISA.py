@@ -134,7 +134,9 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             self.ce_loss_weight = kwargs.pop("ce_loss_weight", None)
             self.dice_loss_weight = kwargs.pop("dice_loss_weight", None)
             self.bce_loss_weight = kwargs.pop("bce_loss_weight", None)
-
+        else:
+            config.mm_vision_tower = config.vision_tower
+            
         self.seg_token_idx = kwargs.pop("seg_token_idx")
 
         super().__init__(config)
@@ -304,7 +306,6 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
 
         ce_loss = model_output.loss
         ce_loss = ce_loss * self.ce_loss_weight
-        loss = ce_loss
         mask_bce_loss = 0
         mask_dice_loss = 0
         num_masks = 0
@@ -331,7 +332,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         mask_dice_loss = self.dice_loss_weight * mask_dice_loss / (num_masks + 1e-8)
         mask_loss = mask_bce_loss + mask_dice_loss
 
-        loss += mask_loss
+        loss = ce_loss + mask_loss
 
         return {
             "loss": loss,
