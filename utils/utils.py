@@ -11,6 +11,8 @@ DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
 DEFAULT_IM_START_TOKEN = "<im_start>"
 DEFAULT_IM_END_TOKEN = "<im_end>"
 
+DEFAULT_SEG_TOKEN = "[SEG]"
+
 SHORT_QUESTION_LIST = [
     DEFAULT_IMAGE_TOKEN + "\n" + "Can you segment the {class_name} in this image?",
     DEFAULT_IMAGE_TOKEN + "\n" + "Please segment the {class_name} in this image.",
@@ -41,6 +43,29 @@ ANSWER_LIST = [
     "[SEG].",
 ]
 
+
+ICS_SHORT_QUESTION_LIST = [
+    DEFAULT_IMAGE_TOKEN + "\n" + "What is the name of the object in the segment mask {}?".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "Identify the object represented by the segment mask {}.".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "Please provide the name of the item shown in the segment mask {}.".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "What object does the segment mask {} represent?".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "Can you name the object depicted in the segment mask {}?".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "Determine the object associated with the segment mask {}.".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "What is labeled by the segment mask {} in the image?".format(DEFAULT_SEG_TOKEN),
+    DEFAULT_IMAGE_TOKEN + "\n" + "Please identify and name the object corresponding to the segment mask {}.".format(DEFAULT_SEG_TOKEN)
+]
+
+# Do we need to specify the class_name and only check that in training?
+ICS_ANSWER_LIST = [
+    "It represents the {class_name}.",
+    "The segment mask shows the {class_name}.",
+    "Highlighted is the {class_name}.",
+    "The mask corresponds to the {class_name}.",
+    "Depicted by the mask is the {class_name}.",
+    "It's the {class_name}.",
+    "The mask encloses the {class_name}.",
+    "The mask is highlighting just the {class_name}."
+]
 
 class Summary(Enum):
     NONE = 0

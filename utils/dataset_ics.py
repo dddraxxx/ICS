@@ -20,7 +20,7 @@ from .data_processing import get_mask_from_json
 from .reason_seg_dataset import ReasonSegDataset
 from .refer import REFER
 from .refer_seg_dataset import ReferSegDataset
-from .sem_seg_dataset import SemSegDataset
+from .sem_seg_dataset_ics import SemSegDataset
 from .utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
                     DEFAULT_IMAGE_TOKEN)
 from .vqa_dataset import VQADataset
