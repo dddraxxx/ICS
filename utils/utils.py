@@ -54,6 +54,17 @@ ICS_SHORT_QUESTION_LIST = [
     DEFAULT_IMAGE_TOKEN + "\n" + "What is labeled by the segment mask {} in the image?".format(DEFAULT_SEG_TOKEN),
     DEFAULT_IMAGE_TOKEN + "\n" + "Please identify and name the object corresponding to the segment mask {}.".format(DEFAULT_SEG_TOKEN)
 ]
+# ICS_SHORT_QUESTION_LIST = [
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'What object or part of an object does the segment mask {} represent? Please put the class name in quotes.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Identify the object or object part highlighted by segment mask {} and enclose the class name in quotes.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Name the object or specific portion shown in segment mask {} and provide the class name within quotes.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Can you determine whether the segment mask {} corresponds to a complete object or just a part? If so, name it and place the class name in quotation marks.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'What is depicted by the segment mask {}: an entire object or a fragment of it? Please specify and provide the class name in quotes.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Describe the object or section of an object represented in the segment mask {} and present the class name in quotes.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Which object or part thereof is enclosed by the segment mask {} in the image? Include the class name in quotation marks.'.format(DEFAULT_SEG_TOKEN),
+#     DEFAULT_IMAGE_TOKEN + "\n" + 'Is the segment mask {} highlighting a whole object or just a portion? Identify it and put the class name in quotes.'.format(DEFAULT_SEG_TOKEN)
+# ]
+
 
 # Do we need to specify the class_name and only check that in training?
 ICS_ANSWER_LIST = [
@@ -66,6 +77,17 @@ ICS_ANSWER_LIST = [
     "The mask encloses the {class_name}.",
     "The mask is highlighting just the {class_name}."
 ]
+# ICS_ANSWER_LIST = [
+#     'It represents "{class_name}".',
+#     'The segment mask shows "{class_name}".',
+#     'Highlighted is the "{class_name}".',
+#     'The mask corresponds to a "{class_name}", so it\'s part of it.',
+#     'Depicted by the mask is a "{class_name}", a part of it.',
+#     'It\'s the "{class_name}" of an object.',
+#     'The mask encloses a "{class_name}", specifically a part of it.',
+#     'The mask is highlighting just the "{class_name}" of an object.'
+# ]
+
 
 class Summary(Enum):
     NONE = 0
