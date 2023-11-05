@@ -136,7 +136,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             self.bce_loss_weight = kwargs.pop("bce_loss_weight", None)
         else:
             config.mm_vision_tower = config.vision_tower
-            
+
         self.seg_token_idx = kwargs.pop("seg_token_idx")
 
         super().__init__(config)
@@ -175,6 +175,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         attention_masks: torch.LongTensor,
         offset: torch.LongTensor,
         masks_list: List[torch.FloatTensor],
+        input_masks_list: List[torch.FloatTensor],
         label_list: List[torch.Tensor],
         resize_list: List[tuple],
         inference: bool = False,
@@ -184,19 +185,6 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         batch_size = image_embeddings.shape[0]
         assert batch_size == len(offset) - 1
 
-        seg_token_mask = input_ids[:, 1:] == self.seg_token_idx
-        seg_token_mask = torch.cat(
-            [
-                seg_token_mask,
-                torch.zeros((seg_token_mask.shape[0], 1)).bool().cuda(),
-            ],
-            dim=1,
-        )
-        # hack for IMAGE_TOKEN_INDEX (we suppose that there is only one image, and it is in the front)
-        seg_token_mask = torch.cat(
-            [torch.zeros((seg_token_mask.shape[0], 255)).bool().cuda(), seg_token_mask],
-            dim=1,
-        )
 
         if inference:
             n_batch = 1
@@ -224,6 +212,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
 
         else:
             images_clip_list = []
+            # offset: several samples share the same image
             for i in range(len(offset) - 1):
                 start_i, end_i = offset[i], offset[i + 1]
                 images_clip_i = (
@@ -235,8 +224,21 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
                 images_clip_list.append(images_clip_i)
             images_clip = torch.cat(images_clip_list, dim=0)
 
+            # TODO: add the mask embedding here
+            masks_encode_list = []
+            for i in range(len(offset)-1):
+                start_i, end_i = offset[i], offset[i+1]
+                masks_encode_i = self.model.visual_model.prompt_encoder(
+                    points=None,
+                    boxes=None,
+                    masks=input_masks_list[i],
+                    text_embeds=None,
+                )
+                masks_encode_list.append(masks_encode_i)
+
             output = super().forward(
                 images=images_clip,
+                masks=masks_encode_list,
                 attention_mask=attention_masks,
                 input_ids=input_ids,
                 labels=labels,
@@ -244,13 +246,30 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             )
             output_hidden_states = output.hidden_states
 
+        # why do this here? maybe its for auto-regressive generation
+        seg_token_mask = input_ids[:, 1:] == self.seg_token_idx
+        seg_token_mask = torch.cat(
+            [
+                seg_token_mask,
+                torch.zeros((seg_token_mask.shape[0], 1)).bool().cuda(),
+            ],
+            dim=1,
+        )
+        # hack for IMAGE_TOKEN_INDEX (we suppose that there is only one image, and it appears before [SEG])
+        seg_token_mask = torch.cat(
+            [torch.zeros((seg_token_mask.shape[0], 255)).bool().cuda(), seg_token_mask],
+            dim=1,
+        )
+
         hidden_states = []
 
         assert len(self.model.text_hidden_fcs) == 1
         hidden_states.append(self.model.text_hidden_fcs[0](output_hidden_states[-1]))
 
+        # strange below
         last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
         pred_embeddings = last_hidden_state[seg_token_mask]
+        # how many seg tokens are there in each sample
         seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]
 
         seg_token_offset = seg_token_counts.cumsum(-1)
@@ -258,6 +277,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             [torch.zeros(1).long().cuda(), seg_token_offset], dim=0
         )
 
+        # get the embeddings for each image in one item in the pred_embeddings: List[]
         seg_token_offset = seg_token_offset[offset]
 
         pred_embeddings_ = []
