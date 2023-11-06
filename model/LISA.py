@@ -136,7 +136,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             self.bce_loss_weight = kwargs.pop("bce_loss_weight", None)
         else:
             config.mm_vision_tower = config.vision_tower
-            
+
         self.seg_token_idx = kwargs.pop("seg_token_idx")
 
         super().__init__(config)
@@ -249,6 +249,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         assert len(self.model.text_hidden_fcs) == 1
         hidden_states.append(self.model.text_hidden_fcs[0](output_hidden_states[-1]))
 
+        assert len(hidden_states) == 1
         last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
         pred_embeddings = last_hidden_state[seg_token_mask]
         seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]
