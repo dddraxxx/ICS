@@ -6,9 +6,9 @@ import torch.nn.functional as F
 from transformers import BitsAndBytesConfig, CLIPVisionModel
 
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
-                         DEFAULT_IMAGE_PATCH_TOKEN)
+                         DEFAULT_IMAGE_PATCH_TOKEN, IGNORE_INDEX)
 
-from .llava.model.language_model.llava_llama import (LlavaLlamaForCausalLM,
+from .llava.model.language_model.llava_llama_ics import (LlavaLlamaForCausalLM,
                                                      LlavaLlamaModel)
 from .segment_anything import build_sam_vit_h
 
@@ -72,6 +72,7 @@ class LisaMetaModel:
             self.config.train_mask_decoder = kwargs["train_mask_decoder"]
             self.config.out_dim = kwargs["out_dim"]
             self.vision_pretrained = kwargs.get("vision_pretrained", None)
+            self.config.input_mask_size = kwargs["input_mask_size"]
         else:
             self.vision_pretrained = kwargs.get("vision_pretrained", None)
             self.initialize_lisa_modules(self.config)
@@ -95,11 +96,23 @@ class LisaMetaModel:
             nn.Linear(in_dim, out_dim),
             nn.Dropout(0.0),
         ]
+        # turn output [SEG] embedding into [MASK] embedding for SAM
         self.text_hidden_fcs = nn.ModuleList([nn.Sequential(*text_fc)])
         self.text_hidden_fcs.train()
         for param in self.text_hidden_fcs.parameters():
             param.requires_grad = True
 
+        # turn [MASK] embedding of SAM into [SEG] embedding for MLLM
+        mask_dim = config.input_mask_size[0] * config.input_mask_size[1]
+        out_dim = config.hidden_size
+        mask_fc = [
+            nn.Linear(mask_dim, out_dim),
+            nn.ReLU(inplace=True),
+        ]
+        self.mask_hidden_fcs = nn.ModuleList([nn.Sequential(*mask_fc)])
+        self.mask_hidden_fcs.train()
+        for param in self.mask_hidden_fcs.parameters():
+            param.requires_grad = True
 
 class LisaModel(LisaMetaModel, LlavaLlamaModel):
     def __init__(
@@ -142,6 +155,8 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         super().__init__(config)
 
         self.model = LisaModel(config, **kwargs)
+        # temporary solution, to access seg in the model
+        self.model.seg_token_idx = self.seg_token_idx
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -225,16 +240,23 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             images_clip = torch.cat(images_clip_list, dim=0)
 
             # TODO: add the mask embedding here
+            # 1. add it in the dataset (sem_seg, reason_seg, ...) (✔️)
+            # 2. add it in the llava model (✔️)
+            #   + write a projector (refer to the SAM)
+            # 3. modify seg_token_mask (✔️)
             masks_encode_list = []
             for i in range(len(offset)-1):
                 start_i, end_i = offset[i], offset[i+1]
-                masks_encode_i = self.model.visual_model.prompt_encoder(
+                import ipdb; ipdb.set_trace()
+                _, masks_encode_i = self.model.visual_model.prompt_encoder(
                     points=None,
                     boxes=None,
                     masks=input_masks_list[i],
                     text_embeds=None,
                 )
                 masks_encode_list.append(masks_encode_i)
+            # TODO: Solve problem: soma sample has mask, some don't
+            masks_encode_list = torch.cat(masks_encode_list, dim=0)
 
             output = super().forward(
                 images=images_clip,
@@ -246,8 +268,9 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             )
             output_hidden_states = output.hidden_states
 
-        # why do this here? maybe its for auto-regressive generation
+        # if in the output (labels true), then we should mask it
         seg_token_mask = input_ids[:, 1:] == self.seg_token_idx
+        seg_token_mask = (labels[:,1:]!=IGNORE_INDEX) & seg_token_mask
         seg_token_mask = torch.cat(
             [
                 seg_token_mask,
@@ -266,8 +289,11 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         assert len(self.model.text_hidden_fcs) == 1
         hidden_states.append(self.model.text_hidden_fcs[0](output_hidden_states[-1]))
 
-        # strange below
-        last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
+        # strange below, modified
+        # last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
+        assert len(output_hidden_states) == 1
+        last_hidden_state = torch.cat(hidden_states, dim=-1)
+
         pred_embeddings = last_hidden_state[seg_token_mask]
         # how many seg tokens are there in each sample
         seg_token_counts = seg_token_mask.int().sum(-1)  # [bs, ]
