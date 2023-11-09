@@ -17,6 +17,7 @@ from model.ICSA import LISAForCausalLM
 from model.llava import conversation as conversation_lib
 from utils.dataset_ics import HybridDataset, ValDataset, collate_fn
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
+                         IMAGE_TOKEN_INDEX,
                          AverageMeter, ProgressMeter, Summary, dict_to_cuda,
                          intersectionAndUnionGPU)
 
@@ -432,6 +433,7 @@ def main(args):
                             writer,
                             train_iter,
                             args,
+                            tokenizer,
                         )
                 except Exception as e:
                     sys.__excepthook__(type(e), e, e.__traceback__)
@@ -464,6 +466,7 @@ def main(args):
             writer,
             train_iter,
             args,
+            tokenizer,
         )
 
         if args.no_eval == False:
@@ -498,6 +501,7 @@ def train(
     writer,
     train_iter,
     args,
+    tokenizer,
 ):
     """Main training loop."""
     batch_time = AverageMeter("Time", ":6.3f")
@@ -507,6 +511,12 @@ def train(
     mask_bce_losses = AverageMeter("MaskBCELoss", ":.4f")
     mask_dice_losses = AverageMeter("MaskDICELoss", ":.4f")
     mask_losses = AverageMeter("MaskLoss", ":.4f")
+
+    # TODO: Add this during training?
+    log_sample = []
+    log_generated = []
+    log_sample_image = []
+    log_frequency = 100
 
     progress = ProgressMeter(
         args.steps_per_epoch,
@@ -567,6 +577,17 @@ def train(
             model.backward(loss)
             model.step()
 
+        # log the first sample in every n steps
+        if global_step % log_frequency == 0:
+            log_sample_ids = input_dict["input_ids"][0].detach().cpu()
+            img_idx = (log_sample_ids==IMAGE_TOKEN_INDEX).nonzero(as_tuple=True)[0]
+            log_sample = (tokenizer.decode(log_sample_ids[:img_idx]) +
+                          " [IMG] " +
+                            tokenizer.decode(log_sample_ids[img_idx+1:]))
+            log_generated_ids = output_dict["output_ids"][0].detach().cpu()
+            log_generated = tokenizer.decode(log_generated_ids)
+            log_sample_image = (input_dict["images_clip"][0].detach().cpu()).float()
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -600,6 +621,13 @@ def train(
                     "metrics/data_secs_per_batch", data_time.avg, global_step
                 )
 
+                # add the log things
+                writer.add_text("train/sample", log_sample, global_step)
+                writer.add_text("train/generated", log_generated, global_step)
+                writer.add_image(
+                    "train/sample_image", log_sample_image, global_step, dataformats="CHW"
+                )
+
             batch_time.reset()
             data_time.reset()
             losses.reset()
@@ -615,8 +643,11 @@ def train(
 
     return train_iter
 
-
 def validate(val_loader, model_engine, epoch, writer, args):
+    pass
+
+
+def validate_mask(val_loader, model_engine, epoch, writer, args):
     intersection_meter = AverageMeter("Intersec", ":6.3f", Summary.SUM)
     union_meter = AverageMeter("Union", ":6.3f", Summary.SUM)
     acc_iou_meter = AverageMeter("gIoU", ":6.3f", Summary.SUM)

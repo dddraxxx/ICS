@@ -359,6 +359,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             }
 
         output = model_output.logits
+        output_ids = output.argmax(-1)
 
         ce_loss = model_output.loss
         ce_loss = ce_loss * self.ce_loss_weight
@@ -396,6 +397,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             "mask_bce_loss": mask_bce_loss,
             "mask_dice_loss": mask_dice_loss,
             "mask_loss": mask_loss,
+            "output_ids": output_ids.detach(),
         }
 
     def evaluate(
