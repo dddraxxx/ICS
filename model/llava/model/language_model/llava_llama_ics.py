@@ -22,7 +22,7 @@ from transformers import (AutoConfig, AutoModelForCausalLM, LlamaConfig,
                           LlamaForCausalLM, LlamaModel)
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from ..llava_arch import LlavaMetaForCausalLM, LlavaMetaModel
+from ..llava_arch_ics import LlavaMetaForCausalLM, LlavaMetaModel
 
 
 class LlavaConfig(LlamaConfig):
@@ -87,7 +87,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             inputs_embeds,
             labels,
         ) = self.prepare_inputs_labels_for_multimodal(
-            input_ids, attention_mask, past_key_values, labels, images
+            input_ids, attention_mask, past_key_values, labels, images, masks
         )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
 

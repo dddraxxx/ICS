@@ -210,6 +210,7 @@ def main(args):
         "vision_pretrained": args.vision_pretrained,
         "vision_tower": args.vision_tower,
         "use_mm_start_end": args.use_mm_start_end,
+        "input_mask_size": (64,64),
     }
     torch_dtype = torch.float32
     if args.precision == "bf16":

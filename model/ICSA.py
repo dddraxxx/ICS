@@ -247,7 +247,6 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             masks_encode_list = []
             for i in range(len(offset)-1):
                 start_i, end_i = offset[i], offset[i+1]
-                import ipdb; ipdb.set_trace()
                 _, masks_encode_i = self.model.visual_model.prompt_encoder(
                     points=None,
                     boxes=None,
