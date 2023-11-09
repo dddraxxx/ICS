@@ -28,4 +28,20 @@ debug_ds --master_port=24999 \
          --exp_name="ics-llama2-7b" \
          --version='/root/Workspace-new/qihuad/github/LLaVA/checkpoints/llava-7b-llama-2-7b-chat' \
          --conv_type='llava_llama_2' \
-         --batch_size=1
+         --batch_size=2
+        #  --no_eval
+
+# debug
+debug_ds --master_port=24999 \
+         --include localhost:0 \
+         train_ics.py \
+         --dataset_dir='../lisa_dataset' \
+         --vision_pretrained=./model_weights/SAM/sam_vit_h_4b8939.pth \
+         --dataset="sem_seg" \
+         --sem_seg_data="paco_lvis" \
+         --sample_rates="1" \
+         --exp_name="ics-llama2-7b" \
+         --version='/root/Workspace-new/qihuad/github/LLaVA/checkpoints/llava-7b-llama-2-7b-chat' \
+         --conv_type='llava_llama_2' \
+         --batch_size=1 \
+         -d

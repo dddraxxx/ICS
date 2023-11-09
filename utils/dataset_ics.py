@@ -34,6 +34,7 @@ def collate_fn(
     images_clip_list = []
     conversation_list = []
     masks_list = []
+    input_masks_list = []
     label_list = []
     resize_list = []
     questions_list = []
@@ -47,8 +48,8 @@ def collate_fn(
         images_clip,
         conversations,
         masks,
-        label,
-        resize,
+        input_masks,
+        label, resize,
         questions,
         sampled_classes,
         inference,
@@ -59,6 +60,7 @@ def collate_fn(
         conversation_list.extend(conversations)
         label_list.append(label)
         masks_list.append(masks.float())
+        input_masks_list.append(input_masks.float())
         resize_list.append(resize)
         questions_list.append(questions)
         sampled_classes_list.append(sampled_classes)
@@ -165,6 +167,7 @@ def collate_fn(
         "labels": targets,
         "attention_masks": attention_masks,
         "masks_list": masks_list,
+        "input_masks_list": input_masks_list,
         "label_list": label_list,
         "resize_list": resize_list,
         "offset": torch.LongTensor(offset_list),

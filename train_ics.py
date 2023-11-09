@@ -13,13 +13,29 @@ import transformers
 from peft import LoraConfig, get_peft_model
 from torch.utils.tensorboard import SummaryWriter
 
-from model.LISA import LISAForCausalLM
+from model.ICSA import LISAForCausalLM
 from model.llava import conversation as conversation_lib
 from utils.dataset_ics import HybridDataset, ValDataset, collate_fn
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
                          AverageMeter, ProgressMeter, Summary, dict_to_cuda,
                          intersectionAndUnionGPU)
 
+import sys
+import ipdb
+
+def start_debugpy():
+    import debugpy
+    # Start debugpy when an unhandled exception is encountered
+    debugpy.listen(("0.0.0.0", 5678))
+    print("debugpy is waiting for a debugger to attach...")
+
+    debugpy.wait_for_client()
+    debugpy.breakpoint()
+def custom_excepthook(exc_type, exc_value, exc_traceback):
+    print(f"Unhandled exception: {exc_value}")
+    start_debugpy()
+    # You can call the original excepthook if you want to see the usual exception message.
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
 def parse_args(args):
     parser = argparse.ArgumentParser(description="LISA Model Training")
@@ -103,7 +119,13 @@ def parse_args(args):
         type=str,
         choices=["llava_v1", "llava_llama_2"],
     )
+
+    # debug
+    parser.add_argument("--debug", "-d", action="store_true", default=False)
+
     args = parser.parse_args(args)
+    # if args.debug:
+    #     sys.excepthook = custom_excepthook
     if args.batch_size >= args.workers:
         args.workers = args.batch_size //2
     return args
@@ -258,6 +280,7 @@ def main(args):
                                 "vision_tower",
                                 "mm_projector",
                                 "text_hidden_fcs",
+                                "mask_hidden_layers",
                             ]
                         ]
                     )
@@ -289,7 +312,7 @@ def main(args):
         if any(
             [
                 x in n
-                for x in ["lm_head", "embed_tokens", "mask_decoder", "text_hidden_fcs", "prompt_encoder"]
+                for x in ["lm_head", "embed_tokens", "mask_decoder", "text_hidden_fcs", "prompt_encoder", "mask_hidden_layers"]
             ]
         ):
             print("n: ", n, "p.shape: ", p.shape)
@@ -397,6 +420,42 @@ def main(args):
 
     for epoch in range(args.start_epoch, args.epochs):
         # train for one epoch
+        if args.debug:
+            while True:
+                try:
+                     with torch.autograd.set_detect_anomaly(True):
+                        train_iter = train(
+                            train_loader,
+                            model_engine,
+                            epoch,
+                            scheduler,
+                            writer,
+                            train_iter,
+                            args,
+                        )
+                except Exception as e:
+                    sys.__excepthook__(type(e), e, e.__traceback__)
+                    from importlib import reload
+                    import ipdb; ipdb.post_mortem(e.__traceback__)
+                    # Reload the modules
+                    import model.ICSA as icsa_module
+                    reload(icsa_module)
+                    import utils.dataset_ics as dataset_ics_module
+                    reload(dataset_ics_module)
+                    import utils.utils as utils_module
+                    reload(utils_module)
+
+                    # Decide whether to stop or continue
+                    stop = input("Stop and start debugging? (y/n): ")
+                    if stop.lower() == 'y':
+                        start_debugpy()  # Ensure this is defined somewhere to start the debugger
+                    # Now, update the references to the reloaded modules
+                    # model.base_model().__class__ = icsa_module.LISAForCausalLM
+                    # train_loader.__class__ = dataset_ics_module.HybridDataset
+                    # collate_fn = dataset_ics_module.collate_fn
+                    # ... update other references as needed
+
+
         train_iter = train(
             train_loader,
             model_engine,
@@ -477,15 +536,20 @@ def train(
             data_time.update(time.time() - end)
             input_dict = dict_to_cuda(input_dict)
 
-            if args.precision == "fp16":
-                input_dict["images"] = input_dict["images"].half()
-                input_dict["images_clip"] = input_dict["images_clip"].half()
-            elif args.precision == "bf16":
-                input_dict["images"] = input_dict["images"].bfloat16()
-                input_dict["images_clip"] = input_dict["images_clip"].bfloat16()
-            else:
-                input_dict["images"] = input_dict["images"].float()
-                input_dict["images_clip"] = input_dict["images_clip"].float()
+            sam_input_name = ["images", "images_clip", "input_masks_list"]
+            def to_type(x, dtype):
+                if type(x) == list:
+                    return [to_type(xx, dtype) for xx in x]
+                if type(x) == torch.Tensor:
+                    return x.to(dtype)
+                raise
+            for k in sam_input_name:
+                if args.precision == "fp16":
+                    input_dict[k] = to_type(input_dict[k], torch.half)
+                elif args.precision == "bf16":
+                    input_dict[k] = to_type(input_dict[k], torch.bfloat16)
+                else:
+                    input_dict[k] = to_type(input_dict[k], torch.float32)
 
             output_dict = model(**input_dict)
 

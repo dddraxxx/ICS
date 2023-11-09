@@ -103,16 +103,30 @@ class LisaMetaModel:
             param.requires_grad = True
 
         # turn [MASK] embedding of SAM into [SEG] embedding for MLLM
+        mask_channel = 256
         mask_dim = config.input_mask_size[0] * config.input_mask_size[1]
         out_dim = config.hidden_size
-        mask_fc = [
-            nn.Linear(mask_dim, out_dim),
+        mask_shrink = [
+            nn.Conv2d(mask_channel, mask_channel, 2, 2, 0),
             nn.ReLU(inplace=True),
+            nn.BatchNorm2d(mask_channel),
+            nn.Conv2d(mask_channel, mask_channel, 2, 2, 0),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(mask_channel),
+            nn.AdaptiveAvgPool2d((4,4))
         ]
-        self.mask_hidden_fcs = nn.ModuleList([nn.Sequential(*mask_fc)])
-        self.mask_hidden_fcs.train()
-        for param in self.mask_hidden_fcs.parameters():
+        mask_fc = [
+            nn.Linear(mask_channel * 16, out_dim),
+        ]
+        self.mask_hidden_layers = nn.ModuleList([nn.Sequential(*mask_shrink), nn.Sequential(*mask_fc)])
+        self.mask_hidden_layers.train()
+        for param in self.mask_hidden_layers.parameters():
             param.requires_grad = True
+
+    def msk_project(self, masks):
+        masks = self.mask_hidden_layers[0](masks)
+        flat_masks = masks.flatten(1)
+        return self.mask_hidden_layers[1](flat_masks)
 
 class LisaModel(LisaMetaModel, LlavaLlamaModel):
     def __init__(
@@ -244,18 +258,15 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
             # 2. add it in the llava model (✔️)
             #   + write a projector (refer to the SAM)
             # 3. modify seg_token_mask (✔️)
-            masks_encode_list = []
-            for i in range(len(offset)-1):
-                start_i, end_i = offset[i], offset[i+1]
-                _, masks_encode_i = self.model.visual_model.prompt_encoder(
-                    points=None,
-                    boxes=None,
-                    masks=input_masks_list[i],
-                    text_embeds=None,
-                )
-                masks_encode_list.append(masks_encode_i)
+            _, masks_encode_list = self.model.visual_model.prompt_encoder(
+                points=None,
+                boxes=None,
+                masks=torch.stack(input_masks_list, dim=0),
+                text_embeds=None,
+            )
             # TODO: Solve problem: soma sample has mask, some don't
-            masks_encode_list = torch.cat(masks_encode_list, dim=0)
+            repeat_num = [offset[i]-offset[i-1] for i in range(1, len(offset))]
+            masks_encode_list = torch.repeat_interleave(masks_encode_list, torch.tensor(repeat_num).cuda(), dim=0)
 
             output = super().forward(
                 images=images_clip,
@@ -290,7 +301,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
 
         # strange below, modified
         # last_hidden_state = torch.stack(hidden_states, dim=-1).sum(dim=-1)
-        assert len(output_hidden_states) == 1
+        assert len(hidden_states) == 1
         last_hidden_state = torch.cat(hidden_states, dim=-1)
 
         pred_embeddings = last_hidden_state[seg_token_mask]
@@ -377,7 +388,7 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         mask_dice_loss = self.dice_loss_weight * mask_dice_loss / (num_masks + 1e-8)
         mask_loss = mask_bce_loss + mask_dice_loss
 
-        loss = ce_loss + mask_loss
+        loss = ce_loss + mask_loss if num_masks>0 else ce_loss
 
         return {
             "loss": loss,

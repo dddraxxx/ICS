@@ -135,12 +135,14 @@ class LlavaMetaForCausalLM(ABC):
         new_input_embeds = []
         new_labels = [] if labels is not None else None
         cur_image_idx = 0
-        mask_token_index = None
+        cur_mask_token_index = None
         for batch_idx, cur_input_ids in enumerate(input_ids):
             # get the index of mask token and get it out
+            # Here, we first turn it into '1' token and stop gradient
+            # then replace it with mask feature
             if (cur_input_ids == self.get_mask_token()).sum() > 0:
-                mask_token_index = torch.where(cur_input_ids == self.get_mask_token())[0][0]
-                cur_input_ids[mask_token_index] = 0
+                cur_mask_token_index = torch.where(cur_input_ids == self.get_mask_token())[0][0]
+                cur_input_ids = torch.cat([cur_input_ids[:cur_mask_token_index],cur_input_ids[:1], cur_input_ids[cur_mask_token_index+1:]], dim=0)
 
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
@@ -266,12 +268,14 @@ class LlavaMetaForCausalLM(ABC):
                     )
                 if labels is not None:
                     cur_new_labels.append(cur_labels)
-            # TODO: replace mask token to mask feature in a good way
-            # cur_new_input_embeds[mask_token_index] = mask_features[batch_idx]
             cur_new_input_embeds = [
                 x.to(device=self.device) for x in cur_new_input_embeds
             ]
             cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
+            # TODO: replace mask token to mask feature in a good way ✔️
+            cur_new_input_embeds = torch.cat([cur_new_input_embeds[:cur_mask_token_index],
+                                             mask_features[batch_idx,None],
+                                             cur_new_input_embeds[cur_mask_token_index+1:]], dim=0)
 
             new_input_embeds.append(cur_new_input_embeds)
             if labels is not None:

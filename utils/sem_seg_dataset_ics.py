@@ -322,12 +322,20 @@ class SemSegDataset(torch.utils.data.Dataset):
             for class_id in class_ids:
                 masks.append(label == class_id)
             masks = torch.stack(masks, dim=0)
+        # TODO: below is just temporary test code
+        input_masks = masks
+        masks = torch.empty(0, *input_masks.shape[1:])
+        # to gray image
+        input_masks = input_masks.float().mean(dim=0, keepdim=True)
+        # resize to 256, 256
+        input_masks = F.interpolate(input_masks[None], size=256, mode="bilinear")[0]
         return (
             image_path,
             image,
             image_clip,
             conversations,
             masks,
+            input_masks,
             label,
             resize,
             questions,
