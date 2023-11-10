@@ -328,7 +328,7 @@ class SemSegDataset(torch.utils.data.Dataset):
         # to gray image
         input_masks = input_masks.float().mean(dim=0, keepdim=True)
         # resize to 256, 256
-        input_masks = F.interpolate(input_masks[None], size=256, mode="bilinear")[0]
+        input_masks = F.interpolate(input_masks[None], size=256, mode="nearest")[0]
         return (
             image_path,
             image,

@@ -12,12 +12,14 @@ import tqdm
 import transformers
 from peft import LoraConfig, get_peft_model
 from torch.utils.tensorboard import SummaryWriter
+import torchvision as tv
+import torch.nn.functional as F
 
 from model.ICSA import LISAForCausalLM
 from model.llava import conversation as conversation_lib
 from utils.dataset_ics import HybridDataset, ValDataset, collate_fn
 from utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
-                         IMAGE_TOKEN_INDEX,
+                         IMAGE_TOKEN_INDEX, IGNORE_INDEX,
                          AverageMeter, ProgressMeter, Summary, dict_to_cuda,
                          intersectionAndUnionGPU)
 
@@ -424,7 +426,7 @@ def main(args):
         if args.debug:
             while True:
                 try:
-                     with torch.autograd.set_detect_anomaly(True):
+                    with torch.autograd.set_detect_anomaly(True):
                         train_iter = train(
                             train_loader,
                             model_engine,
@@ -447,15 +449,17 @@ def main(args):
                     import utils.utils as utils_module
                     reload(utils_module)
 
+                    ipdb.set_trace()
+                    # Now, update the references to the reloaded modules
+                    locals()['model'].base_model.model.__class__ = icsa_module.LISAForCausalLM
+                    locals()['train_loader'].dataset.__class__ = dataset_ics_module.HybridDataset
+                    globals()['collate_fn'] = dataset_ics_module.collate_fn
+                    # ... update other references as needed
+
                     # Decide whether to stop or continue
                     stop = input("Stop and start debugging? (y/n): ")
                     if stop.lower() == 'y':
                         start_debugpy()  # Ensure this is defined somewhere to start the debugger
-                    # Now, update the references to the reloaded modules
-                    # model.base_model().__class__ = icsa_module.LISAForCausalLM
-                    # train_loader.__class__ = dataset_ics_module.HybridDataset
-                    # collate_fn = dataset_ics_module.collate_fn
-                    # ... update other references as needed
 
 
         train_iter = train(
@@ -512,11 +516,7 @@ def train(
     mask_dice_losses = AverageMeter("MaskDICELoss", ":.4f")
     mask_losses = AverageMeter("MaskLoss", ":.4f")
 
-    # TODO: Add this during training?
-    log_sample = []
-    log_generated = []
-    log_sample_image = []
-    log_frequency = 100
+    log_frequency = 10
 
     progress = ProgressMeter(
         args.steps_per_epoch,
@@ -578,15 +578,35 @@ def train(
             model.step()
 
         # log the first sample in every n steps
-        if global_step % log_frequency == 0:
+        if global_step % log_frequency == 0 or args.debug:
             log_sample_ids = input_dict["input_ids"][0].detach().cpu()
             img_idx = (log_sample_ids==IMAGE_TOKEN_INDEX).nonzero(as_tuple=True)[0]
             log_sample = (tokenizer.decode(log_sample_ids[:img_idx]) +
                           " [IMG] " +
                             tokenizer.decode(log_sample_ids[img_idx+1:]))
             log_generated_ids = output_dict["output_ids"][0].detach().cpu()
+            # remove image token
+            log_generated_ids = torch.cat([log_generated_ids[:img_idx],
+                                           log_generated_ids[img_idx+255:]])
+            # only get the output of the model (ignore instruction)
+            labels = input_dict['labels'].cpu()
+            log_generated_ids = log_generated_ids[labels[0]!=IGNORE_INDEX]
             log_generated = tokenizer.decode(log_generated_ids)
-            log_sample_image = (input_dict["images_clip"][0].detach().cpu()).float()
+
+            log_sample_image = (input_dict["images_clip"][0].detach().cpu()).float() # 3, H, W
+            # Normalize
+            log_sample_image = (log_sample_image - log_sample_image.min())/(log_sample_image.max() - log_sample_image.min())*255
+            log_sample_image = log_sample_image.byte()
+
+            input_masks = input_dict['input_masks_list'][0].cpu()
+            log_input_masks = input_masks[0].detach().cpu() # 1,H, W
+            log_input_masks = F.interpolate(log_input_masks[None,None],
+                                            size=log_sample_image.shape[-2:],
+                                            mode='nearest')[0].bool()
+            log_image = tv.utils.draw_segmentation_masks(log_sample_image, log_input_masks, alpha=0.8, colors='red')
+            log_image = tv.utils.make_grid([log_sample_image, log_image], nrow=2, padding=5, pad_value=255)
+
+            log_text = 'GT\n' + log_sample + '\n\nGenerated\n' + log_generated
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -622,10 +642,9 @@ def train(
                 )
 
                 # add the log things
-                writer.add_text("train/sample", log_sample, global_step)
-                writer.add_text("train/generated", log_generated, global_step)
+                writer.add_text("train/text", log_text, global_step)
                 writer.add_image(
-                    "train/sample_image", log_sample_image, global_step, dataformats="CHW"
+                    "train/sample_image", log_image, global_step, dataformats="CHW"
                 )
 
             batch_time.reset()

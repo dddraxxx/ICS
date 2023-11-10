@@ -177,6 +177,10 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # TODO: delete it
+    def dummy_debug(self):
+        return 1
+
     def get_visual_embs(self, pixel_values: torch.FloatTensor):
         with torch.no_grad():
             image_embeddings_list = []

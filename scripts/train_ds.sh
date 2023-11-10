@@ -32,8 +32,8 @@ deepspeed --master_port=24999 \
          --no_eval
 
 # debug
-deepspeed --master_port=24999 \
-         --include localhost:0 \
+deepspeed --master_port=24995 \
+         --include localhost:1 \
          train_ics.py \
          --dataset_dir='../lisa_dataset' \
          --vision_pretrained=./model_weights/SAM/sam_vit_h_4b8939.pth \
@@ -45,7 +45,7 @@ deepspeed --master_port=24999 \
          --conv_type='llava_llama_2' \
          --batch_size=1 \
          -d
-debug_ds --master_port=24999 \
+debug_ds --master_port=24995 \
          --include localhost:0 \
          train_ics.py \
          --dataset_dir='../lisa_dataset' \
