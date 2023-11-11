@@ -21,14 +21,14 @@ deepspeed --master_port=24999 \
          --include localhost:0,1,2,3 \
          train_ics.py \
          --dataset_dir='../lisa_dataset' \
-         --vision_pretrained=./model_weights/SAM/sam_vit_h_4b8939.pth \
+         --vision_pretrained=../lisa_model/sam_vit_h_4b8939.pth \
          --dataset="sem_seg" \
          --sem_seg_data="ade20k||cocostuff||pascal_part||paco_lvis" \
          --sample_rates="1" \
          --exp_name="ics-llama2-7b" \
-         --version='/root/Workspace-new/qihuad/github/LLaVA/checkpoints/llava-7b-llama-2-7b-chat' \
+         --version='../lisa_model/llava-7b-llama-2-7b-chat' \
          --conv_type='llava_llama_2' \
-         --batch_size=2
+         --batch_size=2 \
          --no_eval
 
 # debug
@@ -36,12 +36,12 @@ deepspeed --master_port=24995 \
          --include localhost:1 \
          train_ics.py \
          --dataset_dir='../lisa_dataset' \
-         --vision_pretrained=./model_weights/SAM/sam_vit_h_4b8939.pth \
+         --vision_pretrained=../lisa_model/sam_vit_h_4b8939.pth \
          --dataset="sem_seg" \
          --sem_seg_data="paco_lvis" \
          --sample_rates="1" \
          --exp_name="ics-llama2-7b_debug" \
-         --version='/root/Workspace-new/qihuad/github/LLaVA/checkpoints/llava-7b-llama-2-7b-chat' \
+         --version='../lisa_model/llava-7b-llama-2-7b-chat' \
          --conv_type='llava_llama_2' \
          --batch_size=1 \
          -d

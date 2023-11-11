@@ -164,7 +164,8 @@ class LISAForCausalLM(LlavaLlamaForCausalLM):
         else:
             config.mm_vision_tower = config.vision_tower
 
-        self.seg_token_idx = kwargs.pop("seg_token_idx")
+        if hasattr(kwargs, "seg_token_idx"):
+            self.seg_token_idx = kwargs.pop("seg_token_idx")
 
         super().__init__(config)
 

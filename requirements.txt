@@ -21,3 +21,8 @@ transformers==4.31.0
 uvicorn==0.23.2
 scipy
 bitsandbytes==0.41.1
+# added by me
+deepspeed
+tensorboard
+scikit-image
+ipdb

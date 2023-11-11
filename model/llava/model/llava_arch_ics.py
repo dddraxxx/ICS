@@ -272,7 +272,7 @@ class LlavaMetaForCausalLM(ABC):
                 x.to(device=self.device) for x in cur_new_input_embeds
             ]
             cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
-            # TODO: replace mask token to mask feature in a good way ✔️
+            # replace mask token to mask feature in a good way ✔️
             cur_new_input_embeds = torch.cat([cur_new_input_embeds[:cur_mask_token_index],
                                              mask_features[batch_idx,None],
                                              cur_new_input_embeds[cur_mask_token_index+1:]], dim=0)
